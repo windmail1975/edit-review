@@ -1,91 +1,123 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <title>Excel 管理頁</title>
-    <style>
-        #admin-result {
-            margin-top: 10px;
-            font-weight: bold;
-            color: darkblue;
-        }
-        #admin-error {
-            margin-top: 10px;
-            font-weight: bold;
-            color: red;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Excel 管理介面</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      padding-top: 120px;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4);
+    }
+
+    .modal-content {
+      background-color: #fff;
+      margin: auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 90%;
+      max-width: 400px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+
+    .close-btn {
+      color: #aaa;
+      float: right;
+      font-size: 24px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .close-btn:hover {
+      color: #000;
+    }
+  </style>
 </head>
 <body>
-    <h2>Excel 管理介面</h2>
-    <p>目前欄位結構為：「類別」、「修改前」、「修改後」、「時間戳記」</p>
+  <h2>Excel 管理介面</h2>
+  <p>目前欄位結構為：「類別」、「修改前」、「修改後」、「時間戳記」</p>
 
-    <label>管理密碼：</label>
-    <input type="password" id="adminPassword" required><br><br>
+  <label>管理密碼：</label>
+  <input type="password" id="adminPassword" required><br><br>
 
-    <button onclick="downloadExcel()">下載 Excel</button>
-    <button onclick="clearExcel()">清空所有資料</button>
+  <button onclick="downloadExcel()">下載 Excel</button>
+  <button onclick="clearExcel()">清空所有資料</button>
 
-    <div id="admin-result"></div>
-    <div id="admin-error"></div>
+  <!-- Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span class="close-btn" onclick="closeModal()">&times;</span>
+      <p id="modal-message"></p>
+    </div>
+  </div>
 
-    <script>
-        function downloadExcel() {
-            const password = document.getElementById("adminPassword").value;
-            const result = document.getElementById("admin-result");
-            const error = document.getElementById("admin-error");
-            result.textContent = "";
-            error.textContent = "";
+  <script>
+    function showModal(msg) {
+      document.getElementById("modal-message").textContent = msg;
+      document.getElementById("modal").style.display = "block";
+    }
 
-            fetch("/download", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ password: password })
-            })
-            .then(async res => {
-                if (res.status === 200) {
-                    const blob = await res.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = "output.xlsx";
-                    a.click();
-                    window.URL.revokeObjectURL(url);
-                    result.textContent = "已下載 Excel 檔案。";
-                } else {
-                    const data = await res.json();
-                    error.textContent = data.error || "下載失敗";
-                }
-            })
-            .catch(err => {
-                error.textContent = "下載失敗，請稍後再試。";
-            });
+    function closeModal() {
+      document.getElementById("modal").style.display = "none";
+    }
+
+    function downloadExcel() {
+      const password = document.getElementById("adminPassword").value;
+
+      fetch("/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ password: password })
+      })
+      .then(async res => {
+        if (res.status === 200) {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "output.xlsx";
+          a.click();
+          window.URL.revokeObjectURL(url);
+          showModal("📥 Excel 檔案已下載。");
+        } else {
+          const data = await res.json();
+          showModal("❗ " + (data.error || "下載失敗"));
         }
+      })
+      .catch(err => {
+        showModal("❗ 下載失敗，請稍後再試。");
+      });
+    }
 
-        function clearExcel() {
-            const password = document.getElementById("adminPassword").value;
-            const result = document.getElementById("admin-result");
-            const error = document.getElementById("admin-error");
-            result.textContent = "";
-            error.textContent = "";
+    function clearExcel() {
+      const password = document.getElementById("adminPassword").value;
 
-            fetch("/clear", {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: new URLSearchParams({ password: password })
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.message) {
-                    result.textContent = data.message;
-                } else if (data.error) {
-                    error.textContent = data.error;
-                }
-            })
-            .catch(err => {
-                error.textContent = "清除失敗，請稍後再試。";
-            });
+      fetch("/clear", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ password: password })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.message) {
+          showModal(data.message);
+        } else if (data.error) {
+          showModal("❗ " + data.error);
         }
-    </script>
+      })
+      .catch(err => {
+        showModal("❗ 清除失敗，請稍後再試。");
+      });
+    }
+  </script>
 </body>
 </html>
