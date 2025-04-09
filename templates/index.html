@@ -1,74 +1,148 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <title>提交修改內容</title>
-    <style>
-        #result-message {
-            margin-top: 10px;
-            font-weight: bold;
-            color: darkgreen;
-        }
-        #error-message {
-            margin-top: 10px;
-            font-weight: bold;
-            color: red;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>提交修改內容</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+
+    #result-message {
+      margin-top: 10px;
+      font-weight: bold;
+      color: darkgreen;
+    }
+
+    #error-message {
+      margin-top: 10px;
+      font-weight: bold;
+      color: red;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      padding-top: 120px;
+      left: 0; top: 0;
+      width: 100%; height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4);
+    }
+
+    .modal-content {
+      background-color: #fff;
+      margin: auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 90%;
+      max-width: 400px;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+
+    .close-btn {
+      color: #aaa;
+      float: right;
+      font-size: 24px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .close-btn:hover {
+      color: #000;
+    }
+  </style>
 </head>
 <body>
-    <h2>直接填寫修改內容</h2>
-    <form method="POST" action="/submit">
-        <label>密碼：</label><input type="password" name="password" required><br>
-        <label>類別：</label>
-        <select name="category" required>
-            <option value="">請選擇類別</option>
-            <option value="變更譯名">變更譯名</option>
-            <option value="潤飾文稿">潤飾文稿</option>
-            <option value="修改錯字">修改錯字</option>
-        </select><br>
-        <label>修改前：</label><input type="text" name="before" required><br>
-        <label>修改後：</label><input type="text" name="after" required><br>
-        <button type="submit">送出</button>
-    </form>
+  <h2>直接填寫修改內容</h2>
+  <form id="submit-form" method="POST" action="/submit">
+    <label>請輸入密碼：</label><input type="password" name="password" required><br>
+    <label>請選擇類別：</label>
+    <select name="category" required>
+      <option value="">請選擇類別</option>
+      <option value="變更譯名">變更譯名</option>
+      <option value="潤飾文稿">潤飾文稿</option>
+      <option value="修改錯字">修改錯字</option>
+    </select><br>
+    <label>修改前：</label><input type="text" name="before" required><br>
+    <label>修改後：</label><input type="text" name="after" required><br>
+    <button type="submit">送出</button>
+  </form>
 
-    <hr>
-    <h2>或上傳 Excel 檔案</h2>
-    <form id="upload-form" method="POST" action="/upload_excel" enctype="multipart/form-data">
-        <label>密碼：</label><input type="password" name="password" required><br>
-        <input type="file" name="excel_file" accept=".xlsx" required><br>
-        <button type="submit">上傳並合併</button>
-    </form>
+  <hr>
+  <h2>或上傳 Excel 檔案</h2>
+  <form id="upload-form" method="POST" action="/upload_excel" enctype="multipart/form-data">
+    <label>密碼：</label><input type="password" name="password" required><br>
+    <input type="file" name="excel_file" accept=".xlsx" required><br>
+    <button type="submit">上傳並合併</button>
+  </form>
 
-    <div id="result-message"></div>
-    <div id="error-message"></div>
+  <!-- Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span class="close-btn" onclick="closeModal()">&times;</span>
+      <p id="modal-message"></p>
+    </div>
+  </div>
 
-    <script>
-        document.getElementById("upload-form").addEventListener("submit", function(event) {
-            event.preventDefault();
-            const form = event.target;
-            const formData = new FormData(form);
-            const result = document.getElementById("result-message");
-            const error = document.getElementById("error-message");
-            result.textContent = "";
-            error.textContent = "";
+  <script>
+    // modal 操作
+    function showModal(msg) {
+      document.getElementById("modal-message").textContent = msg;
+      document.getElementById("modal").style.display = "block";
+    }
 
-            fetch("/upload_excel", {
-                method: "POST",
-                body: formData
-            })
-            .then(res => res.json())
-            .then(data => {
-                if (data.message) {
-                    result.textContent = data.message;
-                } else if (data.error) {
-                    error.textContent = data.error;
-                }
-            })
-            .catch(err => {
-                error.textContent = "上傳失敗，請稍後再試。";
-            });
-        });
-    </script>
+    function closeModal() {
+      document.getElementById("modal").style.display = "none";
+    }
+
+    // Excel 上傳
+    document.getElementById("upload-form").addEventListener("submit", function(event) {
+      event.preventDefault();
+      const form = event.target;
+      const formData = new FormData(form);
+
+      fetch("/upload_excel", {
+        method: "POST",
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.message) {
+          showModal(data.message);
+        } else if (data.error) {
+          showModal("❗ " + data.error);
+        }
+      })
+      .catch(err => {
+        showModal("上傳失敗，請稍後再試。");
+      });
+    });
+
+    // 手動提交
+    document.getElementById("submit-form").addEventListener("submit", function(event) {
+      event.preventDefault();
+      const form = event.target;
+      const formData = new FormData(form);
+
+      fetch("/submit", {
+        method: "POST",
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.message) {
+          showModal(data.message);
+          form.reset();
+        } else if (data.error) {
+          showModal("❗ " + data.error);
+        }
+      })
+      .catch(err => {
+        showModal("提交失敗，請稍後再試。");
+      });
+    });
+  </script>
 </body>
 </html>
