@@ -2,14 +2,16 @@ from flask import Flask, request, send_file, jsonify, render_template
 import openpyxl
 import os
 from datetime import datetime
-from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 EXCEL_PATH = "data/excel.xlsx"
-PASSWORD = "your_password"
+
+# 使用環境變數控制密碼
+USER_PASSWORD = os.environ.get("USER_PASSWORD")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 
 def init_excel():
     if not os.path.exists(EXCEL_PATH):
@@ -34,18 +36,18 @@ def submit():
     before = request.form.get("before")
     after = request.form.get("after")
 
-    if password != PASSWORD:
-        return jsonify({"error": "Wrong password"}), 401
+    if password != USER_PASSWORD:
+        return jsonify({"error": "使用者密碼錯誤"}), 401
     if not before or not after:
-        return jsonify({"error": "Both fields required"}), 400
+        return jsonify({"error": "請填寫修改前與修改後"}), 400
 
     wb = openpyxl.load_workbook(EXCEL_PATH)
     ws = wb.active
     timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
-    existing = {(row[0].value, row[1].value) for row in ws.iter_rows(min_row=2, max_col=2) if row[0].value and row[1].value}
+    existing = {(row[0].value, row[1].value) for row in ws.iter_rows(min_row=2, max_col=2)}
     if (before, after) in existing:
-        return jsonify({"error": "Duplicate entry"}), 409
+        return jsonify({"error": "已存在相同內容"}), 409
 
     ws.append([before, after, timestamp])
     wb.save(EXCEL_PATH)
@@ -57,10 +59,10 @@ def upload_excel():
     password = request.form.get("password")
     file = request.files.get("excel_file")
 
-    if password != PASSWORD:
-        return jsonify({"error": "Wrong password"}), 401
+    if password != USER_PASSWORD:
+        return jsonify({"error": "使用者密碼錯誤"}), 401
     if not file:
-        return jsonify({"error": "No file uploaded"}), 400
+        return jsonify({"error": "請選擇檔案"}), 400
 
     filename = file.filename
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -68,7 +70,7 @@ def upload_excel():
 
     main_wb = openpyxl.load_workbook(EXCEL_PATH)
     main_ws = main_wb.active
-    existing = {(row[0].value, row[1].value) for row in main_ws.iter_rows(min_row=2, max_col=2) if row[0].value and row[1].value}
+    existing = {(row[0].value, row[1].value) for row in main_ws.iter_rows(min_row=2, max_col=2)}
 
     new_wb = openpyxl.load_workbook(filepath)
     new_ws = new_wb.active
@@ -89,15 +91,18 @@ def upload_excel():
 
     return jsonify({"message": f"成功合併 {added_count} 筆資料"})
 
-@app.route("/download", methods=["GET"])
+@app.route("/download", methods=["POST"])
 def download_excel():
+    password = request.form.get("password")
+    if password != ADMIN_PASSWORD:
+        return jsonify({"error": "管理者密碼錯誤"}), 401
     return send_file(EXCEL_PATH, as_attachment=True)
 
 @app.route("/clear", methods=["POST"])
 def clear_excel():
     password = request.form.get("password")
-    if password != PASSWORD:
-        return jsonify({"error": "Wrong password"}), 401
+    if password != ADMIN_PASSWORD:
+        return jsonify({"error": "管理者密碼錯誤"}), 401
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -106,7 +111,7 @@ def clear_excel():
     ws["C1"] = "時間戳記"
     wb.save(EXCEL_PATH)
 
-    return jsonify({"message": "Cleared"})
+    return jsonify({"message": "資料已清空"})
 
 if __name__ == "__main__":
     init_excel()
