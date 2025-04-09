@@ -43,10 +43,11 @@
   </style>
 </head>
 <body>
-  <h2>(1) 直接填寫修改內容</h2>
+  <h2>身分驗證</h2>
   <form id="submit-form" method="POST" action="/submit">
     <label>密碼</label><input type="password" name="password" id="user-password" required><br>
     <hr>
+    <h2>(1) 直接填寫修改內容</h2>
     <label>類別</label>
     <select name="category" required>
       <option value="">請選擇類別</option>
@@ -58,13 +59,13 @@
     <label>修改</label><input type="text" name="after" required><br>
     <button type="submit">送出</button>
   </form>
-
+  <hr>
   <h2>(2) 或上傳 Excel 檔案</h2>
   <form id="upload-form" method="POST" action="/upload_excel" enctype="multipart/form-data">
     <input type="file" name="excel_file" accept=".xlsx" required><br>
     <button type="submit">上傳並合併</button>
   </form>
-
+  <hr>
   <h2>(3) 下載目前 Excel</h2>
   <button onclick="downloadExcel()">📥 下載 Excel</button>
 
