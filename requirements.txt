@@ -2,3 +2,4 @@ Flask
 pandas
 openpyxl
 Jinja2
+Flask-SQLAlchemy
