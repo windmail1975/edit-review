@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>提交修改內容</title>
+    <style>
+        #result-message {
+            margin-top: 10px;
+            font-weight: bold;
+            color: darkgreen;
+        }
+        #error-message {
+            margin-top: 10px;
+            font-weight: bold;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h2>直接填寫修改內容</h2>
+    <form method="POST" action="/submit">
+        <label>密碼：</label><input type="password" name="password" required><br>
+        <label>修改前：</label><input type="text" name="before" required><br>
+        <label>修改後：</label><input type="text" name="after" required><br>
+        <button type="submit">送出</button>
+    </form>
+
+    <hr>
+    <h2>或上傳 Excel 檔案</h2>
+    <form id="upload-form" method="POST" action="/upload_excel" enctype="multipart/form-data">
+        <label>密碼：</label><input type="password" name="password" required><br>
+        <input type="file" name="excel_file" accept=".xlsx" required><br>
+        <button type="submit">上傳並合併</button>
+    </form>
+
+    <div id="result-message"></div>
+    <div id="error-message"></div>
+
+    <script>
+        document.getElementById("upload-form").addEventListener("submit", function(event) {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+            const result = document.getElementById("result-message");
+            const error = document.getElementById("error-message");
+            result.textContent = "";
+            error.textContent = "";
+
+            fetch("/upload_excel", {
+                method: "POST",
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.message) {
+                    result.textContent = data.message;
+                } else if (data.error) {
+                    error.textContent = data.error;
+                }
+            })
+            .catch(err => {
+                error.textContent = "上傳失敗，請稍後再試。";
+            });
+        });
+    </script>
+</body>
+</html>
