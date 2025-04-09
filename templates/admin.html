@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>Excel 管理介面</title>
+    <title>Excel 管理頁</title>
     <style>
         #admin-result {
             margin-top: 10px;
@@ -17,20 +17,49 @@
     </style>
 </head>
 <body>
-    <h2>Excel 管理功能</h2>
+    <h2>Excel 管理介面</h2>
+    <p>目前欄位結構為：「類別」、「修改前」、「修改後」、「時間戳記」</p>
 
-    <label>密碼：</label>
+    <label>管理密碼：</label>
     <input type="password" id="adminPassword" required><br><br>
 
     <button onclick="downloadExcel()">下載 Excel</button>
-    <button onclick="clearExcel()">清空資料</button>
+    <button onclick="clearExcel()">清空所有資料</button>
 
     <div id="admin-result"></div>
     <div id="admin-error"></div>
 
     <script>
         function downloadExcel() {
-            window.open("/download", "_blank");
+            const password = document.getElementById("adminPassword").value;
+            const result = document.getElementById("admin-result");
+            const error = document.getElementById("admin-error");
+            result.textContent = "";
+            error.textContent = "";
+
+            fetch("/download", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: new URLSearchParams({ password: password })
+            })
+            .then(async res => {
+                if (res.status === 200) {
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "output.xlsx";
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    result.textContent = "已下載 Excel 檔案。";
+                } else {
+                    const data = await res.json();
+                    error.textContent = data.error || "下載失敗";
+                }
+            })
+            .catch(err => {
+                error.textContent = "下載失敗，請稍後再試。";
+            });
         }
 
         function clearExcel() {
@@ -40,16 +69,9 @@
             result.textContent = "";
             error.textContent = "";
 
-            if (!password) {
-                error.textContent = "請輸入密碼。";
-                return;
-            }
-
             fetch("/clear", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded"
-                },
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: new URLSearchParams({ password: password })
             })
             .then(res => res.json())
@@ -61,7 +83,7 @@
                 }
             })
             .catch(err => {
-                error.textContent = "操作失敗，請稍後再試。";
+                error.textContent = "清除失敗，請稍後再試。";
             });
         }
     </script>
