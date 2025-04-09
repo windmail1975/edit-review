@@ -11,7 +11,7 @@ app = Flask(__name__)
 USER_PASSWORD = os.environ.get("USER_PASSWORD", "user123")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
-# PostgreSQL 連線（從 Render 環境變數 DATABASE_URL 取得）
+# PostgreSQL 連線
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
@@ -103,15 +103,44 @@ def download_excel():
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.append(["類別", "修改前", "修改後", "時間戳記"])
+    ws.title = "修訂記錄"
+
+    # 欄位標題與欄寬設定
+    headers = ["類別", "修改前", "修改後", "時間戳記"]
+    ws.append(headers)
+    column_widths = [12, 24, 36, 20]
+    for i, width in enumerate(column_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
+
+    # 凍結首列
+    ws.freeze_panes = "A2"
+
+    # 加入資料與邊框
+    border = openpyxl.styles.Border(
+        left=openpyxl.styles.Side(style='thin'),
+        right=openpyxl.styles.Side(style='thin'),
+        top=openpyxl.styles.Side(style='thin'),
+        bottom=openpyxl.styles.Side(style='thin')
+    )
+
     for r in revisions:
         ws.append([r.category, r.before, r.after, r.timestamp])
 
+    for row in ws.iter_rows(min_row=1, max_row=ws.max_row, max_col=4):
+        for cell in row:
+            cell.border = border
+
+    # 回傳 Excel
     output = BytesIO()
     wb.save(output)
     output.seek(0)
 
-    return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="output.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 @app.route("/clear", methods=["POST"])
 def clear_excel():
