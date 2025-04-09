@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Excel 管理介面</title>
+    <style>
+        #admin-result {
+            margin-top: 10px;
+            font-weight: bold;
+            color: darkblue;
+        }
+        #admin-error {
+            margin-top: 10px;
+            font-weight: bold;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h2>Excel 管理功能</h2>
+
+    <label>密碼：</label>
+    <input type="password" id="adminPassword" required><br><br>
+
+    <button onclick="downloadExcel()">下載 Excel</button>
+    <button onclick="clearExcel()">清空資料</button>
+
+    <div id="admin-result"></div>
+    <div id="admin-error"></div>
+
+    <script>
+        function downloadExcel() {
+            window.open("/download", "_blank");
+        }
+
+        function clearExcel() {
+            const password = document.getElementById("adminPassword").value;
+            const result = document.getElementById("admin-result");
+            const error = document.getElementById("admin-error");
+            result.textContent = "";
+            error.textContent = "";
+
+            if (!password) {
+                error.textContent = "請輸入密碼。";
+                return;
+            }
+
+            fetch("/clear", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: new URLSearchParams({ password: password })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.message) {
+                    result.textContent = data.message;
+                } else if (data.error) {
+                    error.textContent = data.error;
+                }
+            })
+            .catch(err => {
+                error.textContent = "操作失敗，請稍後再試。";
+            });
+        }
+    </script>
+</body>
+</html>
