@@ -1,24 +1,31 @@
 from flask import Flask, request, send_file, jsonify, render_template
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
+from io import BytesIO
 import openpyxl
 import os
-from datetime import datetime
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-EXCEL_PATH = "data/excel.xlsx"
+# 密碼設定
+USER_PASSWORD = os.environ.get("USER_PASSWORD", "user123")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 
-USER_PASSWORD = os.environ.get("USER_PASSWORD")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+# PostgreSQL 連線（從 Render 環境變數 DATABASE_URL 取得）
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-def init_excel():
-    os.makedirs(os.path.dirname(EXCEL_PATH), exist_ok=True)
-    if not os.path.exists(EXCEL_PATH):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.append(["類別", "修改前", "修改後", "時間戳記"])
-        wb.save(EXCEL_PATH)
+# 資料表 schema
+class Revision(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(100), nullable=False)
+    before = db.Column(db.Text, nullable=False)
+    after = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.String(20), nullable=False)
+
+with app.app_context():
+    db.create_all()
 
 @app.route("/")
 def index():
@@ -40,17 +47,18 @@ def submit():
     if not category or not before or not after:
         return jsonify({"error": "請完整填寫類別、修改前、修改後"}), 400
 
-    wb = openpyxl.load_workbook(EXCEL_PATH)
-    ws = wb.active
-    timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-
-    existing = {(row[0].value, row[1].value, row[2].value) for row in ws.iter_rows(min_row=2, max_col=3)}
-    if (category, before, after) in existing:
+    exists = Revision.query.filter_by(category=category, before=before, after=after).first()
+    if exists:
         return jsonify({"error": "已存在相同資料"}), 409
 
-    ws.append([category, before, after, timestamp])
-    wb.save(EXCEL_PATH)
-
+    revision = Revision(
+        category=category,
+        before=before,
+        after=after,
+        timestamp=datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+    )
+    db.session.add(revision)
+    db.session.commit()
     return jsonify({"message": "提交成功"})
 
 @app.route("/upload_excel", methods=["POST"])
@@ -63,39 +71,47 @@ def upload_excel():
     if not file:
         return jsonify({"error": "請選擇檔案"}), 400
 
-    filename = file.filename
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
+    wb = openpyxl.load_workbook(file)
+    ws = wb.active
 
-    main_wb = openpyxl.load_workbook(EXCEL_PATH)
-    main_ws = main_wb.active
-    existing = {(row[0].value, row[1].value, row[2].value) for row in main_ws.iter_rows(min_row=2, max_col=3)}
-
-    new_wb = openpyxl.load_workbook(filepath)
-    new_ws = new_wb.active
-
-    added_count = 0
-    for row in new_ws.iter_rows(min_row=2, max_col=3, values_only=True):
+    count = 0
+    for row in ws.iter_rows(min_row=2, max_col=3, values_only=True):
         category, before, after = row
         if not category or not before or not after:
             continue
-        if (category, before, after) not in existing:
-            timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-            main_ws.append([category, before, after, timestamp])
-            existing.add((category, before, after))
-            added_count += 1
+        exists = Revision.query.filter_by(category=category, before=before, after=after).first()
+        if not exists:
+            revision = Revision(
+                category=category,
+                before=before,
+                after=after,
+                timestamp=datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+            )
+            db.session.add(revision)
+            count += 1
 
-    main_wb.save(EXCEL_PATH)
-    os.remove(filepath)
-
-    return jsonify({"message": f"成功合併 {added_count} 筆資料"})
+    db.session.commit()
+    return jsonify({"message": f"成功合併 {count} 筆資料"})
 
 @app.route("/download", methods=["POST"])
 def download_excel():
     password = request.form.get("password")
-    if password != ADMIN_PASSWORD:
-        return jsonify({"error": "管理者密碼錯誤"}), 401
-    return send_file(EXCEL_PATH, as_attachment=True)
+    if password not in [USER_PASSWORD, ADMIN_PASSWORD]:
+        return jsonify({"error": "密碼錯誤"}), 401
+
+    revisions = Revision.query.all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["類別", "修改前", "修改後", "時間戳記"])
+    for r in revisions:
+        ws.append([r.category, r.before, r.after, r.timestamp])
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(output, as_attachment=True, download_name="output.xlsx", mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 @app.route("/clear", methods=["POST"])
 def clear_excel():
@@ -103,13 +119,9 @@ def clear_excel():
     if password != ADMIN_PASSWORD:
         return jsonify({"error": "管理者密碼錯誤"}), 401
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.append(["類別", "修改前", "修改後", "時間戳記"])
-    wb.save(EXCEL_PATH)
-
-    return jsonify({"message": "資料已清空"})
+    num_deleted = db.session.query(Revision).delete()
+    db.session.commit()
+    return jsonify({"message": f"資料已清空，共刪除 {num_deleted} 筆資料"})
 
 if __name__ == "__main__":
-    init_excel()
     app.run(host="0.0.0.0", port=5000)
