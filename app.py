@@ -9,7 +9,6 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 EXCEL_PATH = "data/excel.xlsx"
 
-# 使用環境變數控制密碼
 USER_PASSWORD = os.environ.get("USER_PASSWORD")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 
@@ -17,9 +16,7 @@ def init_excel():
     if not os.path.exists(EXCEL_PATH):
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws["A1"] = "修改前"
-        ws["B1"] = "修改後"
-        ws["C1"] = "時間戳記"
+        ws.append(["類別", "修改前", "修改後", "時間戳記"])
         wb.save(EXCEL_PATH)
 
 @app.route("/")
@@ -33,23 +30,24 @@ def admin():
 @app.route("/submit", methods=["POST"])
 def submit():
     password = request.form.get("password")
+    category = request.form.get("category")
     before = request.form.get("before")
     after = request.form.get("after")
 
     if password != USER_PASSWORD:
         return jsonify({"error": "使用者密碼錯誤"}), 401
-    if not before or not after:
-        return jsonify({"error": "請填寫修改前與修改後"}), 400
+    if not category or not before or not after:
+        return jsonify({"error": "請完整填寫類別、修改前、修改後"}), 400
 
     wb = openpyxl.load_workbook(EXCEL_PATH)
     ws = wb.active
     timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
 
-    existing = {(row[0].value, row[1].value) for row in ws.iter_rows(min_row=2, max_col=2)}
-    if (before, after) in existing:
-        return jsonify({"error": "已存在相同內容"}), 409
+    existing = {(row[0].value, row[1].value, row[2].value) for row in ws.iter_rows(min_row=2, max_col=3)}
+    if (category, before, after) in existing:
+        return jsonify({"error": "已存在相同資料"}), 409
 
-    ws.append([before, after, timestamp])
+    ws.append([category, before, after, timestamp])
     wb.save(EXCEL_PATH)
 
     return jsonify({"message": "提交成功"})
@@ -70,20 +68,20 @@ def upload_excel():
 
     main_wb = openpyxl.load_workbook(EXCEL_PATH)
     main_ws = main_wb.active
-    existing = {(row[0].value, row[1].value) for row in main_ws.iter_rows(min_row=2, max_col=2)}
+    existing = {(row[0].value, row[1].value, row[2].value) for row in main_ws.iter_rows(min_row=2, max_col=3)}
 
     new_wb = openpyxl.load_workbook(filepath)
     new_ws = new_wb.active
 
     added_count = 0
-    for row in new_ws.iter_rows(min_row=2, max_col=2, values_only=True):
-        before, after = row
-        if not before or not after:
+    for row in new_ws.iter_rows(min_row=2, max_col=3, values_only=True):
+        category, before, after = row
+        if not category or not before or not after:
             continue
-        if (before, after) not in existing:
+        if (category, before, after) not in existing:
             timestamp = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-            main_ws.append([before, after, timestamp])
-            existing.add((before, after))
+            main_ws.append([category, before, after, timestamp])
+            existing.add((category, before, after))
             added_count += 1
 
     main_wb.save(EXCEL_PATH)
@@ -106,9 +104,7 @@ def clear_excel():
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws["A1"] = "修改前"
-    ws["B1"] = "修改後"
-    ws["C1"] = "時間戳記"
+    ws.append(["類別", "修改前", "修改後", "時間戳記"])
     wb.save(EXCEL_PATH)
 
     return jsonify({"message": "資料已清空"})
