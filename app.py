@@ -13,6 +13,7 @@ USER_PASSWORD = os.environ.get("USER_PASSWORD")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
 
 def init_excel():
+    os.makedirs(os.path.dirname(EXCEL_PATH), exist_ok=True)
     if not os.path.exists(EXCEL_PATH):
         wb = openpyxl.Workbook()
         ws = wb.active
